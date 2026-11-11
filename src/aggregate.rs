@@ -13,7 +13,9 @@
 use std::collections::BTreeMap;
 use std::error::Error as StdError;
 use std::fmt;
+use std::marker::PhantomData;
 
+use crate::circuit::Operator;
 use crate::zset::ZSet;
 
 /// An accumulator would wrap, or a group's row count would go negative.
@@ -42,19 +44,21 @@ impl StdError for Error {}
 /// The stored number is the aggregate itself. When it reaches zero the group
 /// is forgotten: a count of zero is not a group.
 #[derive(Debug, Clone)]
-pub struct Count<K: Ord> {
+pub struct Count<K: Ord, V: Ord> {
     groups: BTreeMap<K, i64>,
+    _value: PhantomData<V>,
 }
 
-impl<K: Ord> Default for Count<K> {
+impl<K: Ord, V: Ord> Default for Count<K, V> {
     fn default() -> Self {
         Self {
             groups: BTreeMap::new(),
+            _value: PhantomData,
         }
     }
 }
 
-impl<K: Ord> Count<K> {
+impl<K: Ord, V: Ord> Count<K, V> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -65,9 +69,9 @@ impl<K: Ord> Count<K> {
     }
 }
 
-impl<K: Clone + Ord> Count<K> {
+impl<K: Clone + Ord, V: Ord> Count<K, V> {
     /// Feeds one change and returns the change to `(key, count)`.
-    pub fn step<V: Ord>(&mut self, change: ZSet<(K, V)>) -> Result<ZSet<(K, i64)>, Error> {
+    pub fn step(&mut self, change: ZSet<(K, V)>) -> Result<ZSet<(K, i64)>, Error> {
         let mut delta: BTreeMap<K, i64> = BTreeMap::new();
         for ((key, _), weight) in change.iter() {
             add_i64(delta.entry(key.clone()).or_insert(0), weight)?;
@@ -99,20 +103,36 @@ impl<K: Clone + Ord> Count<K> {
     }
 }
 
+impl<K, V> Operator for Count<K, V>
+where
+    K: Clone + Ord,
+    V: Ord,
+{
+    type In = (K, V);
+    type Out = (K, i64);
+    type Error = Error;
+
+    fn step(&mut self, change: ZSet<(K, V)>) -> Result<ZSet<(K, i64)>, Error> {
+        Count::step(self, change)
+    }
+}
+
 /// The total of the values in each group.
 ///
 /// The total alone cannot tell an empty group from a group whose values sum
 /// to zero, so the accumulator also holds a row count. Empty groups are
 /// forgotten; a stored total of zero still has rows.
 #[derive(Debug, Clone)]
-pub struct Sum<K: Ord> {
+pub struct Sum<K: Ord, V: Ord> {
     groups: BTreeMap<K, SumGroup>,
+    _value: PhantomData<V>,
 }
 
-impl<K: Ord> Default for Sum<K> {
+impl<K: Ord, V: Ord> Default for Sum<K, V> {
     fn default() -> Self {
         Self {
             groups: BTreeMap::new(),
+            _value: PhantomData,
         }
     }
 }
@@ -123,7 +143,7 @@ struct SumGroup {
     total: i64,
 }
 
-impl<K: Ord> Sum<K> {
+impl<K: Ord, V: Ord> Sum<K, V> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -134,16 +154,17 @@ impl<K: Ord> Sum<K> {
     }
 }
 
-impl<K: Clone + Ord> Sum<K> {
+impl<K, V> Sum<K, V>
+where
+    K: Clone + Ord,
+    V: Copy + Ord + Into<i64>,
+{
     /// Feeds one change and returns the change to `(key, total)`.
     ///
     /// Value times weight is accumulated in `i128` so deleting a stored
     /// `i64::MIN` is allowed; only a result that cannot be an `i64` is
     /// [`Error::Overflow`].
-    pub fn step<V: Copy + Ord + Into<i64>>(
-        &mut self,
-        change: ZSet<(K, V)>,
-    ) -> Result<ZSet<(K, i64)>, Error> {
+    pub fn step(&mut self, change: ZSet<(K, V)>) -> Result<ZSet<(K, i64)>, Error> {
         let mut delta: BTreeMap<K, (i64, i128)> = BTreeMap::new();
         for ((key, value), weight) in change.iter() {
             let slot = delta.entry(key.clone()).or_insert((0, 0));
@@ -183,6 +204,20 @@ impl<K: Clone + Ord> Sum<K> {
             }
         }
         Ok(out)
+    }
+}
+
+impl<K, V> Operator for Sum<K, V>
+where
+    K: Clone + Ord,
+    V: Copy + Ord + Into<i64>,
+{
+    type In = (K, V);
+    type Out = (K, i64);
+    type Error = Error;
+
+    fn step(&mut self, change: ZSet<(K, V)>) -> Result<ZSet<(K, i64)>, Error> {
+        Sum::step(self, change)
     }
 }
 
@@ -266,6 +301,20 @@ where
             }
         }
         Ok(out)
+    }
+}
+
+impl<K, V> Operator for Min<K, V>
+where
+    K: Clone + Ord,
+    V: Clone + Ord,
+{
+    type In = (K, V);
+    type Out = (K, V);
+    type Error = Error;
+
+    fn step(&mut self, change: ZSet<(K, V)>) -> Result<ZSet<(K, V)>, Error> {
+        Min::step(self, change)
     }
 }
 

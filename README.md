@@ -14,7 +14,7 @@ result instead of running the query again.
 | 3 (done) | Checker | Random change streams: the incremental result must equal a full recompute |
 | 4 (done) | Group and aggregate | An update to one row retracts an old result and emits a new one |
 | 5 (done) | Distinct | Output changes only when a count crosses zero |
-| 6 | Circuits | Wiring operators into a graph that is fed one change at a time |
+| 6 (done) | Circuits | Wiring operators into a graph that is fed one change at a time |
 | 7 | Recursion | Reachability in a graph, kept current under edge deletes |
 
 ## Run
