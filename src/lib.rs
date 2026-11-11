@@ -4,6 +4,7 @@
 //! collection are the same kind of thing. See [`zset::ZSet`].
 
 pub mod aggregate;
+pub mod distinct;
 pub mod join;
 pub mod zset;
 
