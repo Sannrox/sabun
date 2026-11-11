@@ -14,6 +14,7 @@
 use std::error::Error as StdError;
 use std::fmt;
 
+use crate::circuit::Operator;
 use crate::zset::ZSet;
 
 /// An accumulated count would wrap.
@@ -86,6 +87,16 @@ impl<T: Clone + Ord> Distinct<T> {
             self.counts.add_row(row, weight);
         }
         Ok(out)
+    }
+}
+
+impl<T: Clone + Ord> Operator for Distinct<T> {
+    type In = T;
+    type Out = T;
+    type Error = Overflow;
+
+    fn step(&mut self, change: ZSet<T>) -> Result<ZSet<T>, Overflow> {
+        Distinct::step(self, change)
     }
 }
 
