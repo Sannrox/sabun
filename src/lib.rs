@@ -7,6 +7,7 @@ pub mod aggregate;
 pub mod circuit;
 pub mod distinct;
 pub mod join;
+pub mod reachability;
 pub mod zset;
 
 #[cfg(test)]
