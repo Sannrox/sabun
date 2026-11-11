@@ -5,3 +5,6 @@
 
 pub mod join;
 pub mod zset;
+
+#[cfg(test)]
+pub(crate) mod checker;
